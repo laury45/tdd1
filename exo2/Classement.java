@@ -1,0 +1,162 @@
+import java.sql.*;
+import java.util.Scanner;
+
+public class Classement{
+	private Connection c;
+	private Equipe e[];
+	private int cpt;
+	
+	public Classement(String server, String bd, String login, String mdp) throws SQLException, Exception{
+		try{
+			Class.forName("oracle.jdbc.driver.OracleDriver");
+			c = DriverManager.getConnection("jdbc:oracle:thin:@"+server+":1521:"+bd,login,mdp);
+
+			System.out.println("Connection réussie");
+			cpt = 0;	
+			e = new Equipe[6];		
+		}
+		catch(SQLException ex){
+			System.out.println("Msg :" + ex.getMessage() + ex.getErrorCode());
+		}
+	}
+
+	public void swap(int a, int b){
+		Equipe aux = new Equipe(0);
+		aux = e[a];
+		e[a] = e[b];
+		e[b] = aux; 
+	}
+
+	public boolean existe(int i){ //verifie si une equipe est deja dans le tableau e
+		boolean ex = false;
+		for(int j=0;j<cpt && !ex;j++){
+			if(e[j].get_id_equipe() == i)
+				ex = true;
+		}
+		return ex;
+	}
+
+	public int indice(int i){ // si une equipe est deja dans le tableau e la fonction renvoie l'indice ou elle se trouve
+		int rep = -1;
+		boolean trouve = false;
+		for(int j=0;j<cpt && !trouve;j++){
+			if(e[j].get_id_equipe() == i)
+				rep = j;
+		}
+		return rep;
+	}
+
+	public String nom_equipe(int i){ // fonction qui renvoie le nom d'une équipe a partir de son ideq
+		String rep = "";
+		try{
+			Statement s = c.createStatement();
+			ResultSet rs = s.executeQuery("select nomeq from equipe where ideq = "+i);
+			rs.next();
+			rep = rs.getString("nomeq");
+		}
+		catch(SQLException ex){
+			System.out.println("Msg :" + ex.getMessage() + ex.getErrorCode());
+		}
+		return rep;	
+	}
+
+	public void calcul_classement(){
+		try{
+			Scanner sc = new Scanner(System.in);
+			System.out.println("Saisir une date au format DD-MM-YY");
+			String date = sc.next();
+
+			Statement s = c.createStatement();
+			// on recupere tout les matchs jouer jusqu'a la date demander
+			ResultSet rs = s.executeQuery("select * from rencontre where datere < to_date('"+date+"','DD-MM-YY')");
+			
+			while(rs.next()){
+				int eq1 = rs.getInt("ideq1"); // onrecupere les info utiles
+				int eq2 = rs.getInt("ideq2");
+				int s1 = rs.getInt("score1");
+				int s2 = rs.getInt("score2");
+				
+				if(!existe(eq1)){
+					Equipe x = new Equipe(eq1); // si l'equipe n'est pas encore dans le tableau e on la cree
+					e[cpt] = x; // on l'ajoute au tableau e
+					cpt++;
+				}
+				if(!existe(eq2)){
+					Equipe y = new Equipe(eq2); // si l'equipe n'est pas encore dans le tableau e on la cree
+					e[cpt] = y; // on l'ajoute au tableau e
+					cpt++;
+				}
+				for(int i=0;i<cpt;i++){
+				    System.out.println(e[i]); 
+				}
+
+				int ind1 = indice(eq1);    // on recupere l'indice de l'equipe dans le tableau e
+				int ind2 = indice(eq2);    // on recupere l'indice de l'equipe dans le tableau e
+				e[ind1].set_nbp(e[ind1].get_nbp()+s1);
+				e[ind1].set_nbc(e[ind1].get_nbc()+s2); // et on met a jour toutes les infos
+				e[ind2].set_nbp(e[ind2].get_nbp()+s2);
+				e[ind2].set_nbc(e[ind2].get_nbc()+s1);
+				if(s1 > s2){
+					e[ind1].set_g(e[ind1].get_g()+1);
+					e[ind2].set_p(e[ind2].get_p()+1);
+				}	
+				else if(s1 < s2){
+					e[ind1].set_p(e[ind1].get_p()+1);
+					e[ind2].set_g(e[ind2].get_g()+1);
+				}	
+				else{
+					e[ind1].set_n(e[ind1].get_n()+1);
+					e[ind2].set_n(e[ind2].get_n()+1);
+				}
+			}
+
+			// for(int z=0;z<cpt;z++){
+			// 	e[z].aff();
+			// }
+		}
+		catch(SQLException ex){
+			System.out.println("Msg :" + ex.getMessage() + ex.getErrorCode());
+		}
+	}
+
+	public void make_classement(){
+		// maj pts et diff
+		for(int i=0;i<cpt;i++){
+			e[i].set_pts( e[i].get_g()*3 + e[i].get_n() );  // pts = g * 3 + n
+
+			e[i].set_diff( e[i].get_nbp() - e[i].get_nbc() ); // diff = nbp - nbc   
+		}
+
+		//classement
+		int deb = 0; int fin = 0;
+		for(int i=cpt-1;i>0;i--){
+			fin = i;
+			for(int j=deb;j<fin;j++){
+				if(e[j].get_pts() > e[j+1].get_pts())
+					swap(j,j+1);
+			}
+		}
+
+		for(int i=1;i<cpt;i++){
+			if(e[i-1].get_pts() == e[i].get_pts())
+				if(e[i-1].get_g() < e[i].get_g())
+					swap(i,i-1);
+		}
+
+		for(int i=1;i<cpt;i++){
+			if(e[i-1].get_pts() == e[i].get_pts())
+				if(e[i-1].get_g() == e[i].get_g())
+					if(e[i-1].get_diff() > e[i].get_diff())
+						swap(i,i-1);
+		}
+
+	}
+
+	public void affiche_classement(){
+		System.out.println("equipe     pts  g    n    p    nbp  nbc  diff");
+		for(int i=cpt-1;i>0;i--){
+			System.out.print(nom_equipe(e[i].get_id_equipe()));
+			System.out.println(e[i]);
+		}
+	}
+}
